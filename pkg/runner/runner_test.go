@@ -55,6 +55,7 @@ func TestNewRunner(t *testing.T) {
 				assert.NotNil(t, runner.dnsclient)
 				assert.NotNil(t, runner.streamChannel)
 				assert.NotNil(t, runner.unique)
+				assert.NotNil(t, runner.probeDB, "probeDB should be initialized")
 			},
 		},
 		{
@@ -1050,4 +1051,32 @@ func TestNewRunner_ScanTypeSyncMatchesScanner(t *testing.T) {
 
 	assert.Equal(t, runner.scanner.ScanType, runner.options.ScanType,
 		"runner options and scanner scan type should always match")
+}
+
+// TestRunnerProbeDBInitialization tests that the embedded UDP probes are loaded
+func TestRunnerProbeDBInitialization(t *testing.T) {
+	options := &Options{
+		Host:     []string{"example.com"},
+		Ports:    "80",
+		Timeout:  30 * time.Second,
+		ScanType: ConnectScan,
+	}
+
+	runner, err := NewRunner(options)
+	require.NoError(t, err)
+	require.NotNil(t, runner.probeDB, "probeDB should be initialized")
+
+	// Verify probes exist for common UDP ports
+	udpPorts := []int{53, 123, 161, 623, 1900, 5060}
+	for _, port := range udpPorts {
+		probes := runner.probeDB.GetProbesForPort(port)
+		assert.NotEmpty(t, probes, "expected probes for UDP port %d", port)
+	}
+
+	// Verify probes are sorted by rarity (lowest first)
+	snmpProbes := runner.probeDB.GetProbesForPort(161)
+	if len(snmpProbes) >= 2 {
+		assert.LessOrEqual(t, snmpProbes[0].Rarity, snmpProbes[1].Rarity,
+			"probes should be sorted by rarity")
+	}
 }
